@@ -13,8 +13,12 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         // The Next.js server calls this API on behalf of visitors and forwards their IP in
-        // X-Forwarded-For. Only addresses listed in TRUSTED_PROXIES may set it, so rate
-        // limits (login, inquiries) apply per visitor instead of per server.
+        // X-Forwarded-For. Two ways to make that safe:
+        //  - GATEWAY_SECRET set: requests without the secret lose their forwarded headers
+        //    (works on hosts with changing addresses such as Vercel; use TRUSTED_PROXIES=*).
+        //  - otherwise only addresses listed in TRUSTED_PROXIES may set it.
+        // Either way rate limits (login, inquiries) apply per visitor instead of per server.
+        $middleware->prepend(\App\Http\Middleware\TrustGatewayHeaders::class);
         $middleware->trustProxies(at: array_values(array_filter(array_map(
             'trim',
             explode(',', (string) env('TRUSTED_PROXIES', '127.0.0.1,::1'))

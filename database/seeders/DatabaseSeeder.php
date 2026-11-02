@@ -19,11 +19,17 @@ class DatabaseSeeder extends Seeder
 
         $this->call([
             RolesAndPermissionsSeeder::class,
-            TestUsersSeeder::class,
             MasterDataSeeder::class,
-            PropertySeeder::class,
             SettingsSeeder::class,
-
         ]);
+
+        // Test accounts (admin@example.com / password ...) and demo listings are for development only.
+        // In production run `php artisan db:seed --class=PropertySeeder` yourself if you want demo listings.
+        if (app()->environment(['local', 'testing'])) {
+            $this->call([
+                TestUsersSeeder::class,
+                PropertySeeder::class,
+            ]);
+        }
     }
 }

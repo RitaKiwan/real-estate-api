@@ -12,17 +12,24 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        // The Next.js server calls this API on behalf of visitors and forwards their IP in
-        // X-Forwarded-For. Two ways to make that safe:
-        //  - GATEWAY_SECRET set: requests without the secret lose their forwarded headers
-        //    (works on hosts with changing addresses such as Vercel; use TRUSTED_PROXIES=*).
-        //  - otherwise only addresses listed in TRUSTED_PROXIES may set it.
-        // Either way rate limits (login, inquiries) apply per visitor instead of per server.
+        // The Next.js server calls this API on behalf of visitors and sends their IP in
+        // X-Visitor-IP together with the shared secret in X-Gateway-Secret.
+        //  - GATEWAY_SECRET set: TrustGatewayHeaders accepts X-Visitor-IP only from requests
+        //    that carry the secret, and strips all forwarded headers from every other request.
+        //    Rate limits then use $request->visitorIp() (per visitor, not per server).
+        //    Set TRUSTED_PROXIES=* so https / host detection keeps working behind the host's proxy.
+        //  - GATEWAY_SECRET empty (local development): only addresses listed in
+        //    TRUSTED_PROXIES may set forwarded headers.
+        // This middleware runs first, before TrustProxies and before any rate limiter.
         $middleware->prepend(\App\Http\Middleware\TrustGatewayHeaders::class);
-        $middleware->trustProxies(at: array_values(array_filter(array_map(
-            'trim',
-            explode(',', (string) env('TRUSTED_PROXIES', '127.0.0.1,::1'))
-        ))));
+
+        // Laravel only treats the *string* '*' (or '**') as "trust the calling proxy",
+        // so pass it through as a string instead of turning it into an array.
+        $proxies = trim((string) env('TRUSTED_PROXIES', '127.0.0.1,::1'));
+
+        $middleware->trustProxies(at: in_array($proxies, ['*', '**'], true)
+            ? $proxies
+            : array_values(array_filter(array_map('trim', explode(',', $proxies)))));
 
         $middleware->alias([
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
